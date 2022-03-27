@@ -2,6 +2,7 @@ from argparse import Action
 from email.policy import default
 import colossalai
 from colossalai.nn.layer.utils import CheckpointModule
+from numpy import require
 import torch
 import time
 from functools import partial
@@ -16,6 +17,7 @@ def parse_args():
     parser.add_argument('-s', '--start', type=int, default=32)
     parser.add_argument('-e', '--end', type=int, default=2**16)
     parser.add_argument('-g', '--growth', type=int, default=2)
+    parser.add_argument('-l', '--layer', type=str, choices=['linear', 'layernorm'], required=True)
     args = parser.parse_args()
     return args
 
@@ -31,7 +33,7 @@ def launch(args):
 
     colossalai.launch_from_torch(config=config)
 
-class Net(CheckpointModule):
+class LinearModel(CheckpointModule):
 
     def __init__(self, dim, mlp_ratio, checkpoint=False):
         super().__init__(checkpoint)
@@ -41,9 +43,21 @@ class Net(CheckpointModule):
     def forward(self, x):
         return self.dense_2(self.dense_1(x))
 
+class LayerNormModel(CheckpointModule):
+    def __init__(self, dim, checkpoint=False):
+        super().__init__(checkpoint)
+        self.norm_1 = colossalai.nn.LayerNorm(dim)
+        self.norm_2 = colossalai.nn.LayerNorm(dim)
 
-def build_model(dim, mlp_ratio, checkpoint):
-    return Net(dim, mlp_ratio, checkpoint)
+    def forward(self, x):
+        return self.norm_2(self.norm_1(x))
+
+
+def build_model(model_type, dim, checkpoint, mlp_ratio=None):
+    if model_type == 'linear':
+        return LinearModel(dim, mlp_ratio, checkpoint)
+    elif model_type == 'layernorm':
+        return LayerNormModel(dim, checkpoint=checkpoint)
 
 def get_time_stamp():
     torch.cuda.synchronize()
@@ -88,7 +102,8 @@ def main():
     
     if torch.distributed.get_rank() == 0:
         world_size = torch.distributed.get_world_size()
-        logger.log_to_file('./logs', suffix=f'tp{args.tp_size}_ws{world_size}_mode{args.mode}')
+        is_with_checkpoint = 'with_checkpoint' if args.checkpoint else 'without_checkpoint'
+        logger.log_to_file(f'./{args.layer}_{is_with_checkpoint}_logs', suffix=f'tp{args.tp_size}_ws{world_size}_mode{args.mode}')
     logger.info(f'config:\n{args.__dict__}\n', ranks=[0])
 
     start_dim = args.start
@@ -96,7 +111,8 @@ def main():
     growth_factor = args.growth
 
     while start_dim < end_dim:
-        model = build_model(start_dim, mlp_ratio=4, checkpoint=args.checkpoint)
+        model = build_model(model_type=args.layer, dim=start_dim, mlp_ratio=4, checkpoint=args.checkpoint)
+        model = model.cuda()
         data_func = partial(get_batch_data, dim=start_dim, batch_size=32, seq_length=512, mode=args.mode)
         avg_step_time = profile_model(model=model, warmup_steps=10, profile_steps=50, data_func=data_func)
         max_allocated, max_cached = get_memory_states()
