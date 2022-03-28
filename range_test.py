@@ -18,6 +18,7 @@ def parse_args():
     parser.add_argument('-e', '--end', type=int, default=2**16)
     parser.add_argument('-g', '--growth', type=int, default=2)
     parser.add_argument('-l', '--layer', type=str, choices=['linear', 'layernorm'], required=True)
+    parser.add_argument('-b', '--by', type=str, choices=['bs', 'dim'], required=True)
     args = parser.parse_args()
     return args
 
@@ -106,19 +107,35 @@ def main():
         logger.log_to_file(f'./{args.layer}_{is_with_checkpoint}_logs', suffix=f'tp{args.tp_size}_ws{world_size}_mode{args.mode}')
     logger.info(f'config:\n{args.__dict__}\n', ranks=[0])
 
-    start_dim = args.start
-    end_dim = args.end
-    growth_factor = args.growth
+    if args.by == 'dim':
+        start_dim = args.start
+        end_dim = args.end
+        growth_factor = args.growth
 
-    while start_dim < end_dim:
-        model = build_model(model_type=args.layer, dim=start_dim, mlp_ratio=4, checkpoint=args.checkpoint)
-        model = model.cuda()
-        data_func = partial(get_batch_data, dim=start_dim, batch_size=32, seq_length=512, mode=args.mode)
-        avg_step_time = profile_model(model=model, warmup_steps=10, profile_steps=50, data_func=data_func)
-        max_allocated, max_cached = get_memory_states()
-        logger.info(f'dimension: {start_dim}, average step time: {avg_step_time}, max allocated: {max_allocated}, max cached: {max_cached}', ranks=[0])
-        torch.cuda.empty_cache()
-        start_dim *= growth_factor
+        while start_dim < end_dim:
+            model = build_model(model_type=args.layer, dim=start_dim, mlp_ratio=4, checkpoint=args.checkpoint)
+            model = model.cuda()
+            data_func = partial(get_batch_data, dim=start_dim, batch_size=32, seq_length=512, mode=args.mode)
+            avg_step_time = profile_model(model=model, warmup_steps=10, profile_steps=50, data_func=data_func)
+            max_allocated, max_cached = get_memory_states()
+            logger.info(f'dimension: {start_dim}, average step time: {avg_step_time}, max allocated: {max_allocated}, max cached: {max_cached}', ranks=[0])
+            torch.cuda.empty_cache()
+            start_dim *= growth_factor
+    elif args.by == 'bs':
+        dim = 1024
+        start_bs = args.start
+        end_bs = args.end
+        growth_factor = args.growth
+
+        while start_bs < end_bs:
+            model = build_model(model_type=args.layer, dim=dim, mlp_ratio=4, checkpoint=args.checkpoint)
+            model = model.cuda()
+            data_func = partial(get_batch_data, dim=dim, batch_size=start_bs, seq_length=512, mode=args.mode)
+            avg_step_time = profile_model(model=model, warmup_steps=10, profile_steps=50, data_func=data_func)
+            max_allocated, max_cached = get_memory_states()
+            logger.info(f'batch size: {start_bs}, average step time: {avg_step_time}, max allocated: {max_allocated}, max cached: {max_cached}', ranks=[0])
+            torch.cuda.empty_cache()
+            start_bs *= growth_factor
 
 if __name__ == '__main__':
     main()
