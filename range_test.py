@@ -71,17 +71,18 @@ def get_memory_states():
     return max_allocated, max_cached
 
 def profile_model(model, warmup_steps, profile_steps, data_func):
-    def _run_step():
-        data = data_func()
+    def _run_step(data):
         out = model(data)
         out.mean().backward()
 
-    for _ in range(warmup_steps):
-        _run_step()
+    data_list = [data_func().cuda() for _ in range(warmup_steps)]
+    for data in data_list:
+        _run_step(data)
 
+    data_list = [data_func().cuda() for _ in range(profile_steps)]
     start = get_time_stamp()
-    for _ in range(profile_steps):
-        _run_step()
+    for data in data_list:
+        _run_step(data)
     end = get_time_stamp()
     return (end - start) / profile_steps
         

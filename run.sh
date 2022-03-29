@@ -6,6 +6,6 @@ python -m torch.distributed.launch \
     range_test.py\
      -t $2 \
      -m $3 \
-     -b bs \
-     -e 1024 \
+     -b dim \
+     -c \
      -l linear

@@ -22,8 +22,8 @@ def parse_log_file(file_path):
                 max_allocated_list.append(max_allocated)
                 max_cached_list.append(max_cached)
                 avg_step_time_list.append(avg_step_time)
-    # return dim_list, avg_step_time_list, max_allocated_list, max_cached_list
-    return dim_list[:8], avg_step_time_list[:8], max_allocated_list[:8], max_cached_list[:8]
+    return dim_list, avg_step_time_list, max_allocated_list, max_cached_list
+    # return dim_list[:8], avg_step_time_list[:8], max_allocated_list[:8], max_cached_list[:8]
 
 
 def plot(title, x_list, y_list, label_list, x_label, y_label, output_path):
@@ -40,6 +40,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-l', '--log_path', type=str)
     parser.add_argument('-o', '--output_path', type=str)
+    parser.add_argument('-b', '--by', type=str)
     return parser.parse_args()
 
 def get_info_from_file_name(file_name):
@@ -69,9 +70,9 @@ def main():
         max_cached_all.append(max_cached_list)
         label_all.append(f'{mode} (WS={world_size}, TP={tp_size})')
 
-    plot(title='Average Step Time', x_list=dim_all, y_list=avg_time_all, label_list=label_all, x_label='dimension', y_label='time/s', output_path=output_path.joinpath('avg_step_time.jpg'))
-    plot(title='Max Allocated Memory', x_list=dim_all, y_list=max_alloc_all, label_list=label_all, x_label='dimension', y_label='Memory/GB', output_path=output_path.joinpath('max_alloc.jpg'))
-    plot(title='Max Cached Memory', x_list=dim_all, y_list=max_cached_all, label_list=label_all, x_label='dimension', y_label='Memory/GB', output_path=output_path.joinpath('max_cached.jpg'))
+    plot(title='Average Step Time', x_list=dim_all, y_list=avg_time_all, label_list=label_all, x_label=args.by, y_label='time/s', output_path=output_path.joinpath('avg_step_time.jpg'))
+    plot(title='Max Allocated Memory', x_list=dim_all, y_list=max_alloc_all, label_list=label_all, x_label=args.by, y_label='Memory/GB', output_path=output_path.joinpath('max_alloc.jpg'))
+    plot(title='Max Cached Memory', x_list=dim_all, y_list=max_cached_all, label_list=label_all, x_label=args.by, y_label='Memory/GB', output_path=output_path.joinpath('max_cached.jpg'))
 
 
 if __name__ == '__main__':
