@@ -71,15 +71,16 @@ def get_memory_states():
     return max_allocated, max_cached
 
 def profile_model(model, warmup_steps, profile_steps, data_func):
+    
     def _run_step(data):
         out = model(data)
         out.mean().backward()
-
-    data_list = [data_func().cuda() for _ in range(warmup_steps)]
+    
+    data_list = [data_func() for _ in range(warmup_steps)]
     for data in data_list:
         _run_step(data)
 
-    data_list = [data_func().cuda() for _ in range(profile_steps)]
+    data_list = [data_func() for _ in range(profile_steps)]
     start = get_time_stamp()
     for data in data_list:
         _run_step(data)
@@ -105,7 +106,7 @@ def main():
     if torch.distributed.get_rank() == 0:
         world_size = torch.distributed.get_world_size()
         is_with_checkpoint = 'with_checkpoint' if args.checkpoint else 'without_checkpoint'
-        logger.log_to_file(f'./{args.layer}_{is_with_checkpoint}_logs', suffix=f'tp{args.tp_size}_ws{world_size}_mode{args.mode}')
+        logger.log_to_file(f'./{args.layer}_{is_with_checkpoint}_logs', suffix=f'tp{args.tp_size}_ws{world_size}_mode{args.mode}', mode='w')
     logger.info(f'config:\n{args.__dict__}\n', ranks=[0])
 
     if args.by == 'dim':
@@ -128,7 +129,7 @@ def main():
         end_bs = args.end
         growth_factor = args.growth
 
-        while start_bs < end_bs:
+        while start_bs <= end_bs:
             model = build_model(model_type=args.layer, dim=dim, mlp_ratio=4, checkpoint=args.checkpoint)
             model = model.cuda()
             data_func = partial(get_batch_data, dim=dim, batch_size=start_bs, seq_length=512, mode=args.mode)
